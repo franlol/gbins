@@ -33,11 +33,13 @@ bun run dev
 | Key        | Action                                  |
 | ---------- | --------------------------------------- |
 | `↑` / `↓`  | move through the binary list            |
+| `PgUp/PgDn`| page the binary list by one screen      |
+| `Home/End` | jump to the first / last binary         |
 | type       | fuzzy-filter binaries by name           |
 | `Backspace`| delete a filter character               |
 | `Tab`      | cycle the function-type filter          |
 | `↵` / `^y` | copy the selected binary's snippets     |
-| `PgUp/PgDn`| scroll the preview pane                 |
+| `^d` / `^u`| scroll the preview pane (half page)     |
 | `^r`       | re-fetch the dataset from upstream      |
 | `Esc`      | clear the filter, or quit when empty    |
 | `^c`       | quit                                    |

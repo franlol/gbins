@@ -23,11 +23,11 @@ export function App() {
   const [query, setQuery] = useState("")
   const [funcFilter, setFuncFilter] = useState<string | null>(null)
   const [index, setIndex] = useState(0)
-  const [scroll, setScroll] = useState(0)
   const [toast, setToast] = useState("")
 
   const [phase, setPhase] = useState(0)
 
+  const listRef = useRef<ScrollBoxRenderable>(null)
   const previewRef = useRef<ScrollBoxRenderable>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -72,10 +72,12 @@ export function App() {
   const live = useRef({ query, funcFilter, filtered, filterCycle, selected, listH })
   live.current = { query, funcFilter, filtered, filterCycle, selected, listH }
 
-  // keep selection within the rendered window
+  // keep the selected row visible inside the scrollbox viewport
   useEffect(() => {
-    if (index < scroll) setScroll(index)
-    else if (index >= scroll + listH) setScroll(index - listH + 1)
+    const sb = listRef.current
+    if (!sb) return
+    if (index < sb.scrollTop) sb.scrollTop = index
+    else if (index >= sb.scrollTop + listH) sb.scrollTop = index - listH + 1
   }, [index, listH]) // eslint-disable-line
 
   // reset preview scroll on selection change
@@ -91,7 +93,7 @@ export function App() {
 
   function resetView() {
     setIndex(0)
-    setScroll(0)
+    if (listRef.current) listRef.current.scrollTop = 0
   }
 
   async function copySelected() {
@@ -119,8 +121,12 @@ export function App() {
     const s = live.current
     if (n === "down") setIndex((i) => Math.min(i + 1, s.filtered.length - 1))
     else if (n === "up") setIndex((i) => Math.max(i - 1, 0))
-    else if (n === "pagedown") previewRef.current?.scrollBy(s.listH)
-    else if (n === "pageup") previewRef.current?.scrollBy(-s.listH)
+    else if (n === "pagedown") setIndex((i) => Math.min(i + s.listH, s.filtered.length - 1))
+    else if (n === "pageup") setIndex((i) => Math.max(i - s.listH, 0))
+    else if (n === "home") setIndex(0)
+    else if (n === "end") setIndex(Math.max(0, s.filtered.length - 1))
+    else if (key.ctrl && n === "d") previewRef.current?.scrollBy(Math.ceil(s.listH / 2))
+    else if (key.ctrl && n === "u") previewRef.current?.scrollBy(-Math.ceil(s.listH / 2))
     else if (n === "tab") {
       const cur = s.filterCycle.indexOf(s.funcFilter)
       setFuncFilter(s.filterCycle[(cur + 1) % s.filterCycle.length] ?? null)
@@ -160,7 +166,6 @@ export function App() {
   const countLabel = `${filtered.length}/${binaries.length}`
   const filterLabel =
     funcFilter !== null ? `filter: ${funcFilter} · tab to cycle` : "all functions · tab to filter"
-  const windowRows = filtered.slice(scroll, scroll + listH)
 
   return (
     <box style={{ flexDirection: "column", width: "100%", height: "100%", backgroundColor: COLORS.bg }}>
@@ -215,9 +220,21 @@ export function App() {
       {/* main panes */}
       <box style={{ flexGrow: 1, flexDirection: "row", paddingLeft: 2, paddingRight: 2, paddingTop: 1 }}>
         {/* list */}
-        <box style={{ width: 34, flexShrink: 0, flexDirection: "column", marginRight: 2 }}>
-          {windowRows.map((b, i) => {
-            const active = scroll + i === index
+        <scrollbox
+          ref={listRef}
+          style={{
+            width: 34,
+            flexShrink: 0,
+            marginRight: 2,
+            rootOptions: { backgroundColor: COLORS.bg },
+            wrapperOptions: { backgroundColor: COLORS.bg },
+            viewportOptions: { backgroundColor: COLORS.bg },
+            contentOptions: { backgroundColor: COLORS.bg },
+            scrollbarOptions: { showArrows: false, trackOptions: { foregroundColor: COLORS.borderBright, backgroundColor: COLORS.bg } },
+          }}
+        >
+          {filtered.map((b, i) => {
+            const active = i === index
             return (
               <box
                 key={b.name}
@@ -238,7 +255,7 @@ export function App() {
               </box>
             )
           })}
-        </box>
+        </scrollbox>
 
         {/* preview */}
         <scrollbox
@@ -269,15 +286,17 @@ export function App() {
       >
         <text>
           <span fg={COLORS.blue}>↑↓</span>
-          <span fg={COLORS.muted}> navigate   </span>
-          <span fg={COLORS.blue}>type</span>
-          <span fg={COLORS.muted}> filter   </span>
+          <span fg={COLORS.muted}> nav   </span>
+          <span fg={COLORS.blue}>⇞⇟</span>
+          <span fg={COLORS.muted}> page   </span>
+          <span fg={COLORS.blue}>⤒⤓</span>
+          <span fg={COLORS.muted}> top/bottom   </span>
           <span fg={COLORS.blue}>tab</span>
           <span fg={COLORS.muted}> function   </span>
           <span fg={COLORS.blue}>↵</span>
           <span fg={COLORS.muted}> copy   </span>
-          <span fg={COLORS.blue}>^r</span>
-          <span fg={COLORS.muted}> refresh   </span>
+          <span fg={COLORS.blue}>^d^u</span>
+          <span fg={COLORS.muted}> preview   </span>
           <span fg={COLORS.blue}>esc</span>
           <span fg={COLORS.muted}> clear/quit</span>
         </text>
