@@ -1,0 +1,25 @@
+{
+  "name": "gbins",
+  "version": "0.1.0",
+  "description": "Terminal UI for the GTFOBins live-off-the-land lookup",
+  "type": "module",
+  "module": "src/index.tsx",
+  "bin": {
+    "gbins": "src/index.tsx"
+  },
+  "scripts": {
+    "dev": "bun run src/index.tsx",
+    "build": "bun build --compile --minify src/index.tsx --outfile dist/gbins"
+  },
+  "dependencies": {
+    "@opentui/core": "^0.4.1",
+    "@opentui/react": "^0.4.1",
+    "react": "^19.2.7",
+    "yaml": "^2.9.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.14",
+    "@types/react": "^19.2.17",
+    "typescript": "^6.0.3"
+  }
+}
