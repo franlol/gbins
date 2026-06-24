@@ -2,6 +2,7 @@
   "name": "gbins",
   "version": "0.1.0",
   "description": "Terminal UI for the GTFOBins live-off-the-land lookup",
+  "license": "MIT",
   "type": "module",
   "module": "src/index.tsx",
   "bin": {

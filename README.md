@@ -1,78 +1,45 @@
-# gbins
+<h1 align="center">gbins</h1>
 
-A fast terminal UI for [GTFOBins](https://gtfobins.github.io) — the live-off-the-land
-binary lookup used in pentesting and CTFs. Fuzzy-search 450+ Unix binaries and read
-their shell / file-read / reverse-shell / privilege-escalation techniques without
-leaving the terminal.
+<p align="center">
+  <a href="https://gtfobins.github.io">GTFOBins</a> in your terminal — fuzzy-search, hit <code>↵</code>, paste the exploit.
+</p>
 
-Built with [OpenTUI](https://github.com/anomalyco/opentui) (React renderer) on
-[Bun](https://bun.sh). All data is fetched live from the upstream GTFOBins repository
-and cached locally — nothing about the binaries or techniques is hardcoded.
+<p align="center">
+  <img src="https://img.shields.io/badge/License-MIT-22c55e?style=flat&logo=open-source-initiative&logoColor=white" alt="License: MIT">
+  <img src="https://img.shields.io/badge/Bun-fbf0df?style=flat&logo=bun&logoColor=black" alt="Bun">
+  <img src="https://img.shields.io/badge/TypeScript-3178c6?style=flat&logo=typescript&logoColor=white" alt="TypeScript">
+  <img src="https://img.shields.io/badge/React-61dafb?style=flat&logo=react&logoColor=black" alt="React">
+</p>
 
-```
-┌ gtfobins — ~/recon ──────────────────────────────────────────────┐
-│ GTFOBins  live-off-the-land lookup          all functions · tab…  │
-│ ❯ python█                                                  1/458  │
-│  ▌ python      7fn   │ python   7 function categories             │
-│                      │  shell                                      │
-│                      │  ╭────────────────────────────────────╮    │
-│                      │  │ python -c 'import os; os.system(…)' │    │
-│  ↑↓ navigate   tab function   ^n^p snippet   ↵ copy   ^a copy all   │
-└───────────────────────────────────────────────────────────────────┘
-```
+![gbins](gbins.png)
 
-## Run
+## Install
 
 ```bash
-bun install
-bun run dev
+bun install && bun run dev
+```
+
+Or compile a standalone binary. No runtime needed:
+
+```bash
+bun run build   # → dist/gbins
 ```
 
 ## Keys
 
-| Key        | Action                                  |
-| ---------- | --------------------------------------- |
-| `↑` / `↓`  | move through the binary list            |
-| `PgUp/PgDn`| page the binary list by one screen      |
-| `Home/End` | jump to the first / last binary         |
-| type       | fuzzy-filter binaries by name           |
-| `Backspace`| delete a filter character               |
-| `Tab`      | cycle the function-type filter          |
-| `^n` / `^p`| move the snippet cursor in the preview  |
-| `↵` / `^y` | copy the highlighted snippet            |
-| `^a`       | copy all of the binary's snippets       |
-| `^d` / `^u`| scroll the preview pane (half page)     |
-| `^r`       | re-fetch the dataset from upstream      |
-| `Esc`      | clear the filter, or quit when empty    |
-| `^c`       | quit                                    |
+| Key         | Action                       |
+| ----------- | ---------------------------- |
+| type        | filter binaries              |
+| `↑` `↓`     | navigate                     |
+| `Tab`       | cycle function type          |
+| `^n` `^p`   | move snippet cursor          |
+| `↵` / click | copy snippet                 |
+| `^a`        | copy all snippets            |
+| `^r`        | refresh from upstream        |
+| `Esc`       | clear filter / quit          |
 
-## Build a standalone binary
+---
 
-```bash
-bun run build          # -> dist/gbins (single executable, no runtime needed)
-```
-
-To cross-compile for other platforms, pass a Bun target, e.g.:
-
-```bash
-bun build --compile --minify src/index.tsx --target=bun-linux-x64   --outfile dist/gbins-linux
-bun build --compile --minify src/index.tsx --target=bun-darwin-arm64 --outfile dist/gbins-macos
-```
-
-## Data
-
-On first run gbins downloads the GTFOBins repo tarball once, parses every
-`_gtfobins/*` entry's YAML front-matter, and caches the result at
-`$XDG_CACHE_HOME/gbins/gtfobins.json` (falling back to `~/.cache`). The cache is
-refreshed automatically after 24h, on demand with `^r`, or it falls back to the
-stale cache when offline.
-
-## Layout
-
-| File              | Responsibility                                  |
-| ----------------- | ----------------------------------------------- |
-| `src/data.ts`     | fetch / untar / parse / cache the GTFOBins data |
-| `src/theme.ts`    | TokyoNight palette and per-function colours     |
-| `src/clipboard.ts`| best-effort clipboard copy (+ OSC 52 fallback)  |
-| `src/App.tsx`     | the TUI                                         |
-| `src/index.tsx`   | entry point                                     |
+<p align="center">
+  Live data from <a href="https://gtfobins.github.io">GTFOBins</a> · built on <a href="https://bun.sh">Bun</a> · MIT © franlol
+</p>
