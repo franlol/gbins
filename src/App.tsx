@@ -167,11 +167,13 @@ export function App() {
         }}
       >
         <text>
-          {"GTFOBins".split("").map((ch, i) => (
-            <span key={i} fg={sampleGradient(WORDMARK_GRADIENT, phase - i * 0.12)}>
-              {ch}
-            </span>
-          ))}
+          <b>
+            {"GTFOBins".split("").map((ch, i) => (
+              <span key={i} fg={sampleGradient(WORDMARK_GRADIENT, phase - i * 0.12)}>
+                {ch}
+              </span>
+            ))}
+          </b>
           <span fg={COLORS.muted}>  live-off-the-land lookup</span>
         </text>
         <text fg={COLORS.faint}>{filterLabel}</text>
