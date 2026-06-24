@@ -1,11 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { memo, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react"
 import { useKeyboard, useTerminalDimensions } from "@opentui/react"
-import { bold, type ScrollBoxRenderable, type BorderCharacters } from "@opentui/core"
+import { type ScrollBoxRenderable, type BorderCharacters } from "@opentui/core"
 import { load, type Binary } from "./data.ts"
 import { WORDMARK_GRADIENT, COLORS, FILTER_ORDER, funcColor, sampleGradient } from "./theme.ts"
 import { copyToClipboard } from "./clipboard.ts"
 
 const PRINTABLE = /^[a-zA-Z0-9._-]$/
+
+// Extra rows rendered above and below the list viewport so fast scrolling
+// doesn't flash blank edges before the next render catches up.
+const OVERSCAN = 6
 
 // Tint the floating toast's border by its leading glyph: success / warning /
 // in-progress get their own accent; everything else stays neutral.
@@ -90,18 +94,53 @@ export function App() {
   // list viewport height: terminal minus chrome (header/search/status/padding)
   const listH = Math.max(3, height - 9)
 
+  // First visible row. This is the source of truth for the rendered window and
+  // is kept in sync with the scrollbox's actual scroll position, so the window
+  // follows the mouse wheel and scrollbar drag — not just keyboard selection.
+  const [scrollTop, setScrollTop] = useState(0)
+
+  // Rows actually rendered: the viewport window (plus overscan). Everything
+  // outside is collapsed into two spacer boxes. Rendering all ~458 rows made
+  // every keystroke re-reconcile the whole list (~35ms/key); windowing keeps it
+  // to roughly a viewport's worth.
+  const winFrom = Math.max(0, scrollTop - OVERSCAN)
+  const winTo = Math.min(filtered.length, scrollTop + listH + OVERSCAN)
+
   // useKeyboard registers its handler once, so reading state directly inside it
   // would be stale. Mirror the live values into a ref the handler can read.
   const live = useRef({ query, funcFilter, filtered, filterCycle, selected, listH, flatSnippets, activeSnip })
   live.current = { query, funcFilter, filtered, filterCycle, selected, listH, flatSnippets, activeSnip }
 
-  // keep the selected row visible inside the scrollbox viewport
+  // Follow the scrollbox's own scrolling. The wheel and scrollbar drag change
+  // the scroll position outside React; the vertical scrollbar emits "change" for
+  // every change (including our own keyboard-driven sets, which then no-op), so
+  // mirroring it into state keeps the rendered window aligned with what's shown.
+  useEffect(() => {
+    const bar = listRef.current?.verticalScrollBar
+    if (!bar) return
+    const onChange = (e: { position: number }) => setScrollTop(e.position)
+    bar.on("change", onChange)
+    return () => {
+      bar.off("change", onChange)
+    }
+  }, [ready])
+
+  // Keyboard navigation: scroll just enough to keep the selected row in view.
+  useEffect(() => {
+    setScrollTop((s) => {
+      let n = s
+      if (index < n) n = index
+      else if (index >= n + listH) n = index - listH + 1
+      return Math.max(0, Math.min(n, Math.max(0, filtered.length - listH)))
+    })
+  }, [index, listH, filtered.length])
+
+  // Push the scroll position onto the scrollbox (a no-op when it already matches,
+  // e.g. when the change originated from the scrollbar itself).
   useEffect(() => {
     const sb = listRef.current
-    if (!sb) return
-    if (index < sb.scrollTop) sb.scrollTop = index
-    else if (index >= sb.scrollTop + listH) sb.scrollTop = index - listH + 1
-  }, [index, listH]) // eslint-disable-line
+    if (sb && sb.scrollTop !== scrollTop) sb.scrollTop = scrollTop
+  }, [scrollTop])
 
   // reset the snippet cursor (and preview scroll) when the binary changes.
   // -1 means "nothing selected": the preview opens neutral, with no box
@@ -306,31 +345,25 @@ export function App() {
             scrollbarOptions: { showArrows: false, trackOptions: { foregroundColor: COLORS.borderBright, backgroundColor: COLORS.bg } },
           }}
         >
-          {filtered.map((b, i) => {
-            const active = i === index
+          {winFrom > 0 ? <box key="spacer-top" style={{ height: winFrom, flexShrink: 0 }} /> : null}
+          {filtered.slice(winFrom, winTo).map((b, k) => {
+            const i = winFrom + k
             return (
-              <box
+              <Row
                 key={b.name}
-                onMouseDown={() => setIndex(i)}
-                onMouseOver={() => setHover(i)}
-                onMouseOut={() => setHover((h) => (h === i ? -1 : h))}
-                style={{
-                  height: 1,
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                  paddingLeft: 1,
-                  paddingRight: 1,
-                  backgroundColor: active ? COLORS.active : i === hover ? COLORS.hover : undefined,
-                }}
-              >
-                <text>
-                  <span fg={active ? COLORS.cyan : COLORS.bg}>{active ? "▌ " : "  "}</span>
-                  <span fg={active ? COLORS.fg : COLORS.fgDim}>{b.name}</span>
-                </text>
-                <text fg={COLORS.faint}>{b.functions.length}fn</text>
-              </box>
+                i={i}
+                name={b.name}
+                fnCount={b.functions.length}
+                active={i === index}
+                hovered={i === hover}
+                onSelect={setIndex}
+                onHover={setHover}
+              />
             )
           })}
+          {filtered.length - winTo > 0 ? (
+            <box key="spacer-bot" style={{ height: filtered.length - winTo, flexShrink: 0 }} />
+          ) : null}
         </scrollbox>
 
         {/* preview */}
@@ -423,6 +456,50 @@ export function App() {
     </box>
   )
 }
+
+// One list row. Memoized so a keystroke or cursor move only re-renders the
+// rows whose props actually changed — not the entire (up-to-458-row) list.
+// `onSelect`/`onHover` are stable state setters, so the only props that vary
+// per row are `active`/`hovered`, keeping re-renders to the 1–2 rows involved.
+const Row = memo(function Row({
+  i,
+  name,
+  fnCount,
+  active,
+  hovered,
+  onSelect,
+  onHover,
+}: {
+  i: number
+  name: string
+  fnCount: number
+  active: boolean
+  hovered: boolean
+  onSelect: Dispatch<SetStateAction<number>>
+  onHover: Dispatch<SetStateAction<number>>
+}) {
+  return (
+    <box
+      onMouseDown={() => onSelect(i)}
+      onMouseOver={() => onHover(i)}
+      onMouseOut={() => onHover((h) => (h === i ? -1 : h))}
+      style={{
+        height: 1,
+        flexDirection: "row",
+        justifyContent: "space-between",
+        paddingLeft: 1,
+        paddingRight: 1,
+        backgroundColor: active ? COLORS.active : hovered ? COLORS.hover : undefined,
+      }}
+    >
+      <text>
+        <span fg={active ? COLORS.cyan : COLORS.bg}>{active ? "▌ " : "  "}</span>
+        <span fg={active ? COLORS.fg : COLORS.fgDim}>{name}</span>
+      </text>
+      <text fg={COLORS.faint}>{fnCount}fn</text>
+    </box>
+  )
+})
 
 // The animated gradient tagline. Isolated in its own component so its 11Hz
 // `phase` tick re-renders only these few spans — not the whole App (and its
