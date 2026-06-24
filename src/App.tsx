@@ -40,18 +40,10 @@ export function App() {
   const [copiedSnip, setCopiedSnip] = useState(-1)
   const [toast, setToast] = useState("")
 
-  const [phase, setPhase] = useState(0)
-
   const listRef = useRef<ScrollBoxRenderable>(null)
   const previewRef = useRef<ScrollBoxRenderable>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  // -- animated tagline gradient ------------------------------------------ //
-  useEffect(() => {
-    const id = setInterval(() => setPhase((p) => p + 0.04), 90)
-    return () => clearInterval(id)
-  }, [])
 
   // -- data load ---------------------------------------------------------- //
   useEffect(() => {
@@ -204,8 +196,10 @@ export function App() {
     else if (key.ctrl && n === "d") previewRef.current?.scrollBy(Math.ceil(s.listH / 2))
     else if (key.ctrl && n === "u") previewRef.current?.scrollBy(-Math.ceil(s.listH / 2))
     else if (n === "tab") {
+      const len = s.filterCycle.length
       const cur = s.filterCycle.indexOf(s.funcFilter)
-      setFuncFilter(s.filterCycle[(cur + 1) % s.filterCycle.length] ?? null)
+      const step = key.shift ? -1 : 1
+      setFuncFilter(s.filterCycle[(cur + step + len) % len] ?? null)
       resetView()
     } else if (n === "backspace") {
       setQuery((q) => q.slice(0, -1))
@@ -243,7 +237,7 @@ export function App() {
 
   const countLabel = `${filtered.length}/${binaries.length}`
   const filterLabel =
-    funcFilter !== null ? `filter: ${funcFilter} · tab to cycle` : "all functions · tab to filter"
+    funcFilter !== null ? `filter: ${funcFilter}` : "all functions"
 
   return (
     <box style={{ flexDirection: "column", width: "100%", height: "100%", backgroundColor: COLORS.bg }}>
@@ -258,13 +252,7 @@ export function App() {
         }}
       >
         <text>
-          <b>
-            {"GTFOBins".split("").map((ch, i) => (
-              <span key={i} fg={sampleGradient(WORDMARK_GRADIENT, phase - i * 0.12)}>
-                {ch}
-              </span>
-            ))}
-          </b>
+          <Wordmark />
           <span fg={COLORS.muted}>  live-off-the-land lookup</span>
         </text>
         <text fg={COLORS.faint}>{filterLabel}</text>
@@ -383,7 +371,7 @@ export function App() {
           <span fg={COLORS.muted}> page   </span>
           <span fg={COLORS.blue}>⤒⤓</span>
           <span fg={COLORS.muted}> top/bottom   </span>
-          <span fg={COLORS.blue}>tab</span>
+          <span fg={COLORS.blue}>tab/⇧tab</span>
           <span fg={COLORS.muted}> function   </span>
           <span fg={COLORS.blue}>^n^p</span>
           <span fg={COLORS.muted}> snippet   </span>
@@ -419,6 +407,26 @@ export function App() {
         </box>
       ) : null}
     </box>
+  )
+}
+
+// The animated gradient tagline. Isolated in its own component so its 11Hz
+// `phase` tick re-renders only these few spans — not the whole App (and its
+// up-to-458-row list + preview), which is what made filtering feel sluggish.
+function Wordmark() {
+  const [phase, setPhase] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => setPhase((p) => p + 0.04), 90)
+    return () => clearInterval(id)
+  }, [])
+  return (
+    <b>
+      {"GTFOBins".split("").map((ch, i) => (
+        <span key={i} fg={sampleGradient(WORDMARK_GRADIENT, phase - i * 0.12)}>
+          {ch}
+        </span>
+      ))}
+    </b>
   )
 }
 
