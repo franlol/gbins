@@ -373,19 +373,26 @@ export function App() {
       >
         <text>
           <span fg={COLORS.blue}>↑↓</span>
-          <span fg={COLORS.muted}> nav   </span>
+          <span fg={COLORS.muted}> select</span>
+          <span fg={COLORS.faint}> · </span>
           <span fg={COLORS.blue}>⇞⇟</span>
-          <span fg={COLORS.muted}> page   </span>
+          <span fg={COLORS.muted}> page</span>
+          <span fg={COLORS.faint}> · </span>
           <span fg={COLORS.blue}>⤒⤓</span>
-          <span fg={COLORS.muted}> top/bottom   </span>
-          <span fg={COLORS.blue}>tab/⇧tab</span>
-          <span fg={COLORS.muted}> function   </span>
-          <span fg={COLORS.blue}>^n^p</span>
-          <span fg={COLORS.muted}> snippet   </span>
+          <span fg={COLORS.muted}> top/bottom</span>
+          <span fg={COLORS.faint}> · </span>
+          <span fg={COLORS.blue}>tab</span>
+          <span fg={COLORS.muted}> filter type</span>
+          <span fg={COLORS.faint}> · </span>
+          <span fg={COLORS.blue}>^n/^p</span>
+          <span fg={COLORS.muted}> snippet</span>
+          <span fg={COLORS.faint}> · </span>
           <span fg={COLORS.blue}>↵</span>
-          <span fg={COLORS.muted}> copy   </span>
+          <span fg={COLORS.muted}> copy</span>
+          <span fg={COLORS.faint}> · </span>
           <span fg={COLORS.blue}>^a</span>
-          <span fg={COLORS.muted}> all   </span>
+          <span fg={COLORS.muted}> copy all</span>
+          <span fg={COLORS.faint}> · </span>
           <span fg={COLORS.blue}>esc</span>
           <span fg={COLORS.muted}> clear/quit</span>
         </text>
