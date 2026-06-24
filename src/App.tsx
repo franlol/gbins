@@ -23,7 +23,10 @@ export function App() {
   const [query, setQuery] = useState("")
   const [funcFilter, setFuncFilter] = useState<string | null>(null)
   const [index, setIndex] = useState(0)
+  const [hover, setHover] = useState(-1)
   const [snipIndex, setSnipIndex] = useState(0)
+  const [hoverSnip, setHoverSnip] = useState(-1)
+  const [copiedSnip, setCopiedSnip] = useState(-1)
   const [toast, setToast] = useState("")
 
   const [phase, setPhase] = useState(0)
@@ -31,6 +34,7 @@ export function App() {
   const listRef = useRef<ScrollBoxRenderable>(null)
   const previewRef = useRef<ScrollBoxRenderable>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // -- animated tagline gradient ------------------------------------------ //
   useEffect(() => {
@@ -100,6 +104,8 @@ export function App() {
   // marked until the user starts navigating with ^n/^p.
   useEffect(() => {
     setSnipIndex(-1)
+    setHoverSnip(-1)
+    setCopiedSnip(-1)
     if (previewRef.current) previewRef.current.scrollTop = 0
   }, [selected?.name])
 
@@ -119,16 +125,37 @@ export function App() {
     if (listRef.current) listRef.current.scrollTop = 0
   }
 
-  async function copyActive() {
-    const { selected: sel, flatSnippets: snips, activeSnip: idx } = live.current
-    if (!sel) return
+  async function copyByIndex(idx: number): Promise<boolean> {
+    const { selected: sel, flatSnippets: snips } = live.current
+    if (!sel) return false
     const snip = snips[idx]
     if (!snip) {
       flashToast("↵ pick a snippet first — ^n/^p")
-      return
+      return false
     }
     const ok = await copyToClipboard(snip.code)
     flashToast(ok ? `✓ copied ${sel.name} · ${snip.type}` : "⚠ clipboard unavailable")
+    return ok
+  }
+
+  // Briefly tag a snippet box with "✓ copied" on its border, mirroring the
+  // toast's lifetime so the confirmation lands right where the user clicked.
+  function flashCopied(idx: number) {
+    setCopiedSnip(idx)
+    if (copiedTimer.current) clearTimeout(copiedTimer.current)
+    copiedTimer.current = setTimeout(() => setCopiedSnip(-1), 1600)
+  }
+
+  async function copyActive() {
+    const idx = live.current.activeSnip
+    if (await copyByIndex(idx)) flashCopied(idx)
+  }
+
+  // Clicking a snippet is a one-shot copy: the toast plus an inline "✓ copied"
+  // border tag confirm it. We don't move the keyboard cursor (the "↵ copy"
+  // box), so a mouse click leaves no lingering selection.
+  async function copySnippet(idx: number) {
+    if (await copyByIndex(idx)) flashCopied(idx)
   }
 
   async function copyAll() {
@@ -277,13 +304,16 @@ export function App() {
             return (
               <box
                 key={b.name}
+                onMouseDown={() => setIndex(i)}
+                onMouseOver={() => setHover(i)}
+                onMouseOut={() => setHover((h) => (h === i ? -1 : h))}
                 style={{
                   height: 1,
                   flexDirection: "row",
                   justifyContent: "space-between",
                   paddingLeft: 1,
                   paddingRight: 1,
-                  backgroundColor: active ? COLORS.active : undefined,
+                  backgroundColor: active ? COLORS.active : i === hover ? COLORS.hover : undefined,
                 }}
               >
                 <text>
@@ -308,7 +338,18 @@ export function App() {
             scrollbarOptions: { showArrows: false, trackOptions: { foregroundColor: COLORS.borderBright, backgroundColor: COLORS.panel } },
           }}
         >
-          {selected ? <Preview binary={selected} active={activeSnip} /> : <text fg={COLORS.muted}>No matches. Adjust your search.</text>}
+          {selected ? (
+            <Preview
+              binary={selected}
+              active={activeSnip}
+              hovered={hoverSnip}
+              copied={copiedSnip}
+              onCopy={copySnippet}
+              onHover={setHoverSnip}
+            />
+          ) : (
+            <text fg={COLORS.muted}>No matches. Adjust your search.</text>
+          )}
         </scrollbox>
       </box>
 
@@ -347,7 +388,21 @@ export function App() {
   )
 }
 
-function Preview({ binary, active }: { binary: Binary; active: number }) {
+function Preview({
+  binary,
+  active,
+  hovered,
+  copied,
+  onCopy,
+  onHover,
+}: {
+  binary: Binary
+  active: number
+  hovered: number
+  copied: number
+  onCopy: (idx: number) => void
+  onHover: (idx: number) => void
+}) {
   // Running index across every snippet, matching the flattened cursor in App.
   let flat = -1
   return (
@@ -384,19 +439,35 @@ function Preview({ binary, active }: { binary: Binary; active: number }) {
             {fn.snippets.map((s, i) => {
               const idx = ++flat
               const isActive = idx === active
+              const isHovered = idx === hovered
+              const isCopied = idx === copied
+              // Just-copied wins over the active/hover affordances so the
+              // confirmation shows right on the box the user clicked.
+              const title = isCopied
+                ? " ✓ copied "
+                : isActive
+                  ? " ↵ copy "
+                  : isHovered
+                    ? " click to copy "
+                    : undefined
               return (
                 <box key={i} id={`snip-${idx}`} style={{ flexDirection: "column", marginTop: 1 }}>
                   {s.note ? <text fg={COLORS.faint}>  {s.note}</text> : null}
                   {/* Every box keeps its category colour; the active one stands
-                      out with a heavy border + a "↵ copy" tag on its top edge. */}
+                      out with a heavy border + a "↵ copy" tag on its top edge.
+                      Hovering surfaces the same "click to copy" affordance, and a
+                      fresh click flashes "✓ copied" in green on the border. */}
                   <box
-                    title={isActive ? " ↵ copy " : undefined}
-                    titleColor={color}
+                    onMouseDown={() => onCopy(idx)}
+                    onMouseOver={() => onHover(idx)}
+                    onMouseOut={() => onHover(-1)}
+                    title={title}
+                    titleColor={isCopied ? COLORS.green : color}
                     titleAlignment="right"
                     style={{
                       border: true,
-                      borderStyle: isActive ? "heavy" : "rounded",
-                      borderColor: color,
+                      borderStyle: isActive || isHovered || isCopied ? "heavy" : "rounded",
+                      borderColor: isCopied ? COLORS.green : color,
                       backgroundColor: COLORS.bg,
                       paddingLeft: 1,
                       paddingRight: 1,

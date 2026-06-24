@@ -7,6 +7,7 @@ export const COLORS = {
   border: "#20222e",
   borderBright: "#2a2e44",
   active: "#24283b",
+  hover: "#1f2233",
   fg: "#c0caf5",
   fgDim: "#7982a9",
   muted: "#565f89",
