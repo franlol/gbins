@@ -23,6 +23,7 @@ export function App() {
   const [query, setQuery] = useState("")
   const [funcFilter, setFuncFilter] = useState<string | null>(null)
   const [index, setIndex] = useState(0)
+  const [snipIndex, setSnipIndex] = useState(0)
   const [toast, setToast] = useState("")
 
   const [phase, setPhase] = useState(0)
@@ -64,13 +65,27 @@ export function App() {
 
   const selected = filtered[Math.min(index, Math.max(0, filtered.length - 1))]
 
+  // Flatten the selected binary's snippets so a single cursor can walk every
+  // command across all function categories, in render order. The active
+  // snippet is what ↵ copies; ^a still copies the whole flattened set.
+  const flatSnippets = useMemo(() => {
+    const out: { code: string; type: string }[] = []
+    if (selected)
+      for (const fn of selected.functions)
+        for (const s of fn.snippets) out.push({ code: s.code, type: fn.type })
+    return out
+  }, [selected])
+
+  // Clamp into [-1, last]; -1 keeps the "nothing selected" neutral state.
+  const activeSnip = snipIndex < 0 ? -1 : Math.min(snipIndex, flatSnippets.length - 1)
+
   // list viewport height: terminal minus chrome (header/search/status/padding)
   const listH = Math.max(3, height - 8)
 
   // useKeyboard registers its handler once, so reading state directly inside it
   // would be stale. Mirror the live values into a ref the handler can read.
-  const live = useRef({ query, funcFilter, filtered, filterCycle, selected, listH })
-  live.current = { query, funcFilter, filtered, filterCycle, selected, listH }
+  const live = useRef({ query, funcFilter, filtered, filterCycle, selected, listH, flatSnippets, activeSnip })
+  live.current = { query, funcFilter, filtered, filterCycle, selected, listH, flatSnippets, activeSnip }
 
   // keep the selected row visible inside the scrollbox viewport
   useEffect(() => {
@@ -80,10 +95,18 @@ export function App() {
     else if (index >= sb.scrollTop + listH) sb.scrollTop = index - listH + 1
   }, [index, listH]) // eslint-disable-line
 
-  // reset preview scroll on selection change
+  // reset the snippet cursor (and preview scroll) when the binary changes.
+  // -1 means "nothing selected": the preview opens neutral, with no box
+  // marked until the user starts navigating with ^n/^p.
   useEffect(() => {
+    setSnipIndex(-1)
     if (previewRef.current) previewRef.current.scrollTop = 0
   }, [selected?.name])
+
+  // keep the active snippet visible as the cursor walks the preview
+  useEffect(() => {
+    previewRef.current?.scrollChildIntoView(`snip-${activeSnip}`)
+  }, [activeSnip])
 
   function flashToast(msg: string) {
     setToast(msg)
@@ -96,12 +119,24 @@ export function App() {
     if (listRef.current) listRef.current.scrollTop = 0
   }
 
-  async function copySelected() {
+  async function copyActive() {
+    const { selected: sel, flatSnippets: snips, activeSnip: idx } = live.current
+    if (!sel) return
+    const snip = snips[idx]
+    if (!snip) {
+      flashToast("↵ pick a snippet first — ^n/^p")
+      return
+    }
+    const ok = await copyToClipboard(snip.code)
+    flashToast(ok ? `✓ copied ${sel.name} · ${snip.type}` : "⚠ clipboard unavailable")
+  }
+
+  async function copyAll() {
     const sel = live.current.selected
     if (!sel) return
     const code = sel.functions.flatMap((f) => f.snippets.map((s) => s.code)).join("\n")
     const ok = await copyToClipboard(code)
-    flashToast(ok ? `✓ copied ${sel.name} snippets` : "⚠ clipboard unavailable")
+    flashToast(ok ? `✓ copied all ${sel.name} snippets` : "⚠ clipboard unavailable")
   }
 
   async function refresh() {
@@ -125,6 +160,8 @@ export function App() {
     else if (n === "pageup") setIndex((i) => Math.max(i - s.listH, 0))
     else if (n === "home") setIndex(0)
     else if (n === "end") setIndex(Math.max(0, s.filtered.length - 1))
+    else if (key.ctrl && n === "n") setSnipIndex((j) => Math.min(j + 1, s.flatSnippets.length - 1))
+    else if (key.ctrl && n === "p") setSnipIndex((j) => Math.max(j - 1, -1))
     else if (key.ctrl && n === "d") previewRef.current?.scrollBy(Math.ceil(s.listH / 2))
     else if (key.ctrl && n === "u") previewRef.current?.scrollBy(-Math.ceil(s.listH / 2))
     else if (n === "tab") {
@@ -141,7 +178,9 @@ export function App() {
         resetView()
       } else process.exit(0)
     } else if (n === "return" || (key.ctrl && n === "y")) {
-      void copySelected()
+      void copyActive()
+    } else if (key.ctrl && n === "a") {
+      void copyAll()
     } else if (key.ctrl && n === "r") {
       void refresh()
     } else {
@@ -269,7 +308,7 @@ export function App() {
             scrollbarOptions: { showArrows: false, trackOptions: { foregroundColor: COLORS.borderBright, backgroundColor: COLORS.panel } },
           }}
         >
-          {selected ? <Preview binary={selected} /> : <text fg={COLORS.muted}>No matches. Adjust your search.</text>}
+          {selected ? <Preview binary={selected} active={activeSnip} /> : <text fg={COLORS.muted}>No matches. Adjust your search.</text>}
         </scrollbox>
       </box>
 
@@ -293,10 +332,12 @@ export function App() {
           <span fg={COLORS.muted}> top/bottom   </span>
           <span fg={COLORS.blue}>tab</span>
           <span fg={COLORS.muted}> function   </span>
+          <span fg={COLORS.blue}>^n^p</span>
+          <span fg={COLORS.muted}> snippet   </span>
           <span fg={COLORS.blue}>↵</span>
           <span fg={COLORS.muted}> copy   </span>
-          <span fg={COLORS.blue}>^d^u</span>
-          <span fg={COLORS.muted}> preview   </span>
+          <span fg={COLORS.blue}>^a</span>
+          <span fg={COLORS.muted}> all   </span>
           <span fg={COLORS.blue}>esc</span>
           <span fg={COLORS.muted}> clear/quit</span>
         </text>
@@ -306,7 +347,9 @@ export function App() {
   )
 }
 
-function Preview({ binary }: { binary: Binary }) {
+function Preview({ binary, active }: { binary: Binary; active: number }) {
+  // Running index across every snippet, matching the flattened cursor in App.
+  let flat = -1
   return (
     <box style={{ flexDirection: "column" }}>
       <text>
@@ -338,24 +381,33 @@ function Preview({ binary }: { binary: Binary }) {
                 <text fg={COLORS.bgDark}>{fn.type}</text>
               </box>
             </box>
-            {fn.snippets.map((s, i) => (
-              <box key={i} style={{ flexDirection: "column", marginTop: 1 }}>
-                {s.note ? <text fg={COLORS.faint}>  {s.note}</text> : null}
-                <box
-                  style={{
-                    border: true,
-                    borderStyle: "rounded",
-                    borderColor: color,
-                    backgroundColor: COLORS.bg,
-                    paddingLeft: 1,
-                    paddingRight: 1,
-                  }}
-                >
-                  <text fg={COLORS.code}>{s.code}</text>
+            {fn.snippets.map((s, i) => {
+              const idx = ++flat
+              const isActive = idx === active
+              return (
+                <box key={i} id={`snip-${idx}`} style={{ flexDirection: "column", marginTop: 1 }}>
+                  {s.note ? <text fg={COLORS.faint}>  {s.note}</text> : null}
+                  {/* Every box keeps its category colour; the active one stands
+                      out with a heavy border + a "↵ copy" tag on its top edge. */}
+                  <box
+                    title={isActive ? " ↵ copy " : undefined}
+                    titleColor={color}
+                    titleAlignment="right"
+                    style={{
+                      border: true,
+                      borderStyle: isActive ? "heavy" : "rounded",
+                      borderColor: color,
+                      backgroundColor: COLORS.bg,
+                      paddingLeft: 1,
+                      paddingRight: 1,
+                    }}
+                  >
+                    <text fg={COLORS.code}>{s.code}</text>
+                  </box>
+                  {s.comment ? <text fg={COLORS.muted}>  {s.comment}</text> : null}
                 </box>
-                {s.comment ? <text fg={COLORS.muted}>  {s.comment}</text> : null}
-              </box>
-            ))}
+              )
+            })}
           </box>
         )
       })}

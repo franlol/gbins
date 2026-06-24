@@ -17,7 +17,7 @@ and cached locally — nothing about the binaries or techniques is hardcoded.
 │                      │  shell                                      │
 │                      │  ╭────────────────────────────────────╮    │
 │                      │  │ python -c 'import os; os.system(…)' │    │
-│  ↑↓ navigate   type filter   tab function   ↵ copy   ^r refresh    │
+│  ↑↓ navigate   tab function   ^n^p snippet   ↵ copy   ^a copy all   │
 └───────────────────────────────────────────────────────────────────┘
 ```
 
@@ -38,7 +38,9 @@ bun run dev
 | type       | fuzzy-filter binaries by name           |
 | `Backspace`| delete a filter character               |
 | `Tab`      | cycle the function-type filter          |
-| `↵` / `^y` | copy the selected binary's snippets     |
+| `^n` / `^p`| move the snippet cursor in the preview  |
+| `↵` / `^y` | copy the highlighted snippet            |
+| `^a`       | copy all of the binary's snippets       |
 | `^d` / `^u`| scroll the preview pane (half page)     |
 | `^r`       | re-fetch the dataset from upstream      |
 | `Esc`      | clear the filter, or quit when empty    |
