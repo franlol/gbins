@@ -236,8 +236,6 @@ export function App() {
   }
 
   const countLabel = `${filtered.length}/${binaries.length}`
-  const filterLabel =
-    funcFilter !== null ? `filter: ${funcFilter}` : "all functions"
 
   return (
     <box style={{ flexDirection: "column", width: "100%", height: "100%", backgroundColor: COLORS.bg }}>
@@ -255,7 +253,16 @@ export function App() {
           <Wordmark />
           <span fg={COLORS.muted}>  live-off-the-land lookup</span>
         </text>
-        <text fg={COLORS.faint}>{filterLabel}</text>
+        <text>
+          {funcFilter !== null ? (
+            <>
+              <span fg={COLORS.fgDim}>filter: </span>
+              <span fg={funcColor(funcFilter)}>{funcFilter}</span>
+            </>
+          ) : (
+            <span fg={COLORS.muted}>all functions</span>
+          )}
+        </text>
       </box>
 
       {/* search */}
