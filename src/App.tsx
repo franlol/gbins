@@ -7,6 +7,16 @@ import { copyToClipboard } from "./clipboard.ts"
 
 const PRINTABLE = /^[a-zA-Z0-9._-]$/
 
+// Tint the floating toast's border by its leading glyph: success / warning /
+// in-progress get their own accent; everything else stays neutral.
+function toastColor(msg: string): string {
+  const g = msg[0]
+  if (g === "✓") return COLORS.green
+  if (g === "⚠") return COLORS.red
+  if (g === "⟳") return COLORS.cyan
+  return COLORS.borderBright
+}
+
 // A faint dotted rule used to separate function categories in the preview.
 // Only the top edge is drawn, so just `horizontal` is visible; it tiles to
 // fill whatever width the preview pane currently has.
@@ -19,6 +29,7 @@ export function App() {
   const { height } = useTerminalDimensions()
 
   const [binaries, setBinaries] = useState<Binary[]>([])
+  const [ready, setReady] = useState(false)
   const [error, setError] = useState<string>("")
   const [query, setQuery] = useState("")
   const [funcFilter, setFuncFilter] = useState<string | null>(null)
@@ -47,6 +58,7 @@ export function App() {
     load()
       .then((r) => setBinaries(r.binaries))
       .catch((e) => setError(String(e?.message ?? e)))
+      .finally(() => setReady(true))
   }, [])
 
   // -- derived ------------------------------------------------------------ //
@@ -84,7 +96,7 @@ export function App() {
   const activeSnip = snipIndex < 0 ? -1 : Math.min(snipIndex, flatSnippets.length - 1)
 
   // list viewport height: terminal minus chrome (header/search/status/padding)
-  const listH = Math.max(3, height - 8)
+  const listH = Math.max(3, height - 9)
 
   // useKeyboard registers its handler once, so reading state directly inside it
   // would be stale. Mirror the live values into a ref the handler can read.
@@ -280,11 +292,11 @@ export function App() {
           <span fg={COLORS.fg}>{query}</span>
           <span fg={COLORS.cyan}>█</span>
         </text>
-        <text fg={COLORS.muted}>{countLabel}</text>
+        <text fg={COLORS.muted}>{ready ? countLabel : "…"}</text>
       </box>
 
       {/* main panes */}
-      <box style={{ flexGrow: 1, flexDirection: "row", paddingLeft: 2, paddingRight: 2, paddingTop: 1 }}>
+      <box style={{ flexGrow: 1, flexDirection: "row", paddingLeft: 2, paddingRight: 2, paddingTop: 1, paddingBottom: 1 }}>
         {/* list */}
         <scrollbox
           ref={listRef}
@@ -348,7 +360,7 @@ export function App() {
               onHover={setHoverSnip}
             />
           ) : (
-            <text fg={COLORS.muted}>No matches. Adjust your search.</text>
+            <text fg={COLORS.muted}>{ready ? "No matches. Adjust your search." : "Loading GTFOBins…"}</text>
           )}
         </scrollbox>
       </box>
@@ -382,8 +394,30 @@ export function App() {
           <span fg={COLORS.blue}>esc</span>
           <span fg={COLORS.muted}> clear/quit</span>
         </text>
-        <text fg={COLORS.faint}>{toast || `${countLabel} ${filtered.length === 1 ? "match" : "matches"}`}</text>
+        <text fg={COLORS.faint}>{ready ? `${countLabel} ${filtered.length === 1 ? "match" : "matches"}` : "loading…"}</text>
       </box>
+
+      {/* floating toast — copy/refresh feedback lands in its own bordered
+          notification anchored bottom-right, on top of everything (zIndex), so
+          it never shares a row with the status bar legend or count. */}
+      {toast ? (
+        <box
+          style={{
+            position: "absolute",
+            bottom: 2,
+            right: 3,
+            zIndex: 100,
+            border: true,
+            borderStyle: "rounded",
+            borderColor: toastColor(toast),
+            backgroundColor: COLORS.bgDark,
+            paddingLeft: 1,
+            paddingRight: 1,
+          }}
+        >
+          <text fg={COLORS.fg}>{toast}</text>
+        </box>
+      ) : null}
     </box>
   )
 }
