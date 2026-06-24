@@ -1,11 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useKeyboard, useTerminalDimensions } from "@opentui/react"
-import { bold, type ScrollBoxRenderable } from "@opentui/core"
+import { bold, type ScrollBoxRenderable, type BorderCharacters } from "@opentui/core"
 import { load, type Binary } from "./data.ts"
 import { WORDMARK_GRADIENT, COLORS, FILTER_ORDER, funcColor, sampleGradient } from "./theme.ts"
 import { copyToClipboard } from "./clipboard.ts"
 
 const PRINTABLE = /^[a-zA-Z0-9._-]$/
+
+// A faint dotted rule used to separate function categories in the preview.
+// Only the top edge is drawn, so just `horizontal` is visible; it tiles to
+// fill whatever width the preview pane currently has.
+const DOTTED: BorderCharacters = {
+  topLeft: "", topRight: "", bottomLeft: "", bottomRight: "",
+  horizontal: "┈", vertical: "", topT: "", bottomT: "", leftT: "", rightT: "", cross: "",
+}
 
 export function App() {
   const { height } = useTerminalDimensions()
@@ -273,7 +281,7 @@ export function App() {
           <span fg={COLORS.blue}>esc</span>
           <span fg={COLORS.muted}> clear/quit</span>
         </text>
-        <text fg={COLORS.faint}>{toast || `${countLabel} matches`}</text>
+        <text fg={COLORS.faint}>{toast || `${countLabel} ${filtered.length === 1 ? "match" : "matches"}`}</text>
       </box>
     </box>
   )
@@ -291,10 +299,21 @@ function Preview({ binary }: { binary: Binary }) {
       ) : null}
       <text> </text>
 
-      {binary.functions.map((fn) => {
+      {binary.functions.map((fn, fi) => {
         const color = funcColor(fn.type)
         return (
           <box key={fn.type} style={{ flexDirection: "column", marginBottom: 1 }}>
+            {fi > 0 ? (
+              <box
+                style={{
+                  height: 1,
+                  marginBottom: 1,
+                  border: ["top"],
+                  borderColor: COLORS.faint,
+                  customBorderChars: DOTTED,
+                }}
+              />
+            ) : null}
             <box style={{ flexDirection: "row" }}>
               <box style={{ backgroundColor: color, paddingLeft: 1, paddingRight: 1 }}>
                 <text fg={COLORS.bgDark}>{fn.type}</text>
