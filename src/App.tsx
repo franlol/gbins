@@ -284,7 +284,7 @@ function Preview({ binary }: { binary: Binary }) {
     <box style={{ flexDirection: "column" }}>
       <text>
         <span fg={COLORS.cyan}>{binary.name}</span>
-        <span fg={COLORS.muted}>   {binary.functions.length} function categories</span>
+        <span fg={COLORS.muted}>{`   ${binary.functions.length} function ${binary.functions.length === 1 ? "category" : "categories"}`}</span>
       </text>
       {binary.description ? (
         <text fg={COLORS.muted}>{binary.description}</text>
