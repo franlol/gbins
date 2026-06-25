@@ -1,7 +1,7 @@
 <h1 align="center">gbins</h1>
 
 <p align="center">
-  <a href="https://gtfobins.github.io">GTFOBins</a> in your terminal — fuzzy-search, hit <code>↵</code>, paste the exploit.
+  <a href="https://gtfobins.github.io">GTFOBins</a> in your terminal. Fuzzy-search, hit <code>↵</code>, paste the exploit.
 </p>
 
 <p align="center">
@@ -18,14 +18,23 @@
 **Homebrew** (macOS arm64, Linux):
 
 ```bash
-brew install franlol/tap/gbins
+brew tap franlol/tap
+brew install gbins
 ```
 
-**Arch Linux (AUR)** — prebuilt binary or build from source:
+**Arch Linux (AUR)** — prebuilt binary or built from source (any AUR helper, e.g. `paru`/`yay`):
 
 ```bash
-yay -S gbins-bin   # prebuilt
-yay -S gbins       # built from source with bun
+paru -S gbins-bin   # prebuilt binary
+paru -S gbins       # built from source with bun
+```
+
+**Prebuilt binary** — grab a tarball for your platform from the
+[latest release](https://github.com/franlol/gbins/releases/latest)
+(`darwin-arm64`, `linux-x64`, `linux-arm64`), then:
+
+```bash
+tar -xzf gbins-*.tar.gz && sudo install -m755 gbins /usr/local/bin/
 ```
 
 **From source** with [Bun](https://bun.sh):
