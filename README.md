@@ -15,6 +15,21 @@
 
 ## Install
 
+**Homebrew** (macOS arm64, Linux):
+
+```bash
+brew install franlol/tap/gbins
+```
+
+**Arch Linux (AUR)** — prebuilt binary or build from source:
+
+```bash
+yay -S gbins-bin   # prebuilt
+yay -S gbins       # built from source with bun
+```
+
+**From source** with [Bun](https://bun.sh):
+
 ```bash
 bun install && bun run dev
 ```

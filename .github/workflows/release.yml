@@ -1,0 +1,210 @@
+name: Release
+
+# Tag a release to fire this:  git tag v0.1.0 && git push origin v0.1.0
+# Steps: build native binaries on a matrix of runners -> publish a GitHub
+# Release -> (opt-in) bump the Homebrew tap and the AUR package.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Build one self-contained binary per platform. The native libopentui core is
+  # embedded by `bun build --compile`, so each target MUST build on its own OS
+  # (cross-compiling from a single box would miss the other platforms' libs).
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-14,         target: darwin-arm64 }
+          - { os: ubuntu-latest,    target: linux-x64 }
+          - { os: ubuntu-24.04-arm, target: linux-arm64 }
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Verify tag matches package.json version
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(bun --print 'require("./package.json").version')"
+          if [ "$tag" != "$pkg" ]; then
+            echo "::error::Tag v$tag does not match package.json version $pkg"
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build standalone binary
+        run: bun build --compile src/index.tsx --outfile gbins
+
+      - name: Smoke test
+        run: ./gbins --version
+
+      - name: Package tarball + checksum
+        shell: bash
+        run: |
+          name="gbins-${GITHUB_REF_NAME}-${{ matrix.target }}"
+          tar -czf "${name}.tar.gz" gbins LICENSE README.md
+          shasum -a 256 "${name}.tar.gz" > "${name}.tar.gz.sha256"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: gbins-${{ matrix.target }}
+          path: |
+            gbins-*.tar.gz
+            gbins-*.tar.gz.sha256
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # Collect every artifact, build a single checksums.txt, publish the Release.
+  # ---------------------------------------------------------------------------
+  release:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Aggregate checksums
+        run: |
+          cd dist
+          cat *.sha256 | sort -k2 > checksums.txt
+          cat checksums.txt
+
+      - uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            dist/gbins-*.tar.gz
+            dist/checksums.txt
+          generate_release_notes: true
+
+  # ---------------------------------------------------------------------------
+  # Opt-in: set repo variable PUBLISH_HOMEBREW=true and secret HOMEBREW_TAP_TOKEN
+  # (a PAT with write access to franlol/homebrew-tap).
+  # ---------------------------------------------------------------------------
+  homebrew:
+    name: Update Homebrew tap
+    needs: release
+    if: vars.PUBLISH_HOMEBREW == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: source
+
+      - name: Checkout tap
+        uses: actions/checkout@v5
+        with:
+          repository: franlol/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+
+      - name: Download checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --pattern checksums.txt --dir .
+
+      - name: Render formula
+        run: |
+          mkdir -p tap/Formula
+          bash source/scripts/render-homebrew.sh \
+            "${GITHUB_REF_NAME#v}" "$GITHUB_REF_NAME" checksums.txt \
+            > tap/Formula/gbins.rb
+          cat tap/Formula/gbins.rb
+
+      - name: Commit & push
+        run: |
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/gbins.rb
+          git commit -m "gbins ${GITHUB_REF_NAME}" || { echo "no changes"; exit 0; }
+          git push
+
+  # ---------------------------------------------------------------------------
+  # Opt-in: set repo variable PUBLISH_AUR=true and secret AUR_SSH_PRIVATE_KEY
+  # (registered on your aur.archlinux.org account).
+  # ---------------------------------------------------------------------------
+  aur:
+    name: Publish to AUR
+    needs: release
+    if: vars.PUBLISH_AUR == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Download checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --pattern checksums.txt --dir .
+
+      - name: Render PKGBUILD
+        run: |
+          mkdir -p out
+          bash scripts/render-pkgbuild.sh \
+            "${GITHUB_REF_NAME#v}" "$GITHUB_REF_NAME" checksums.txt \
+            > out/PKGBUILD
+          cat out/PKGBUILD
+
+      - name: Publish gbins-bin
+        uses: KSXGitHub/github-actions-deploy-aur@v3.0.1
+        with:
+          pkgname: gbins-bin
+          pkgbuild: out/PKGBUILD
+          commit_username: ${{ vars.AUR_USERNAME }}
+          commit_email: ${{ vars.AUR_EMAIL }}
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: "Update to ${{ github.ref_name }}"
+
+  # ---------------------------------------------------------------------------
+  # Opt-in (same secrets as `aur`): the source-built `gbins` package, compiled
+  # from the GitHub tag tarball with bun on the user's machine.
+  # ---------------------------------------------------------------------------
+  aur-src:
+    name: Publish gbins (source) to AUR
+    needs: release
+    if: vars.PUBLISH_AUR == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Checksum the source tarball
+        id: src
+        run: |
+          url="https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${GITHUB_REF_NAME}.tar.gz"
+          curl -fsSL "$url" -o src.tar.gz
+          echo "sha=$(sha256sum src.tar.gz | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Render PKGBUILD
+        run: |
+          mkdir -p out
+          bash scripts/render-pkgbuild-src.sh \
+            "${GITHUB_REF_NAME#v}" "$GITHUB_REF_NAME" "${{ steps.src.outputs.sha }}" \
+            > out/PKGBUILD
+          cat out/PKGBUILD
+
+      - name: Publish gbins
+        uses: KSXGitHub/github-actions-deploy-aur@v3.0.1
+        with:
+          pkgname: gbins
+          pkgbuild: out/PKGBUILD
+          commit_username: ${{ vars.AUR_USERNAME }}
+          commit_email: ${{ vars.AUR_EMAIL }}
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: "Update to ${{ github.ref_name }}"
